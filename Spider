@@ -1,0 +1,114 @@
+import urllib.request
+import re
+import os
+
+#http://tieba.baidu.com/p/2005436135
+
+
+class BDTB:
+    def getPage(self,Url,SeeLZ,Num):
+        if(SeeLZ == 1):
+            Url = Url.strip() + '?see_lz=1' + '&pn=' + str(Num)  # strip()去掉字符串左右两边的空格
+        if(SeeLZ == 0):
+            Url = Url.strip() + '?see_lz=0' + '&pn=' + str(Num)
+        try:
+            request = urllib.request.Request(Url)
+            response = urllib.request.urlopen(request)
+            return response.read().decode('utf-8')
+        except urllib.request.URLError as e:
+            if hasattr(e,'reason'):
+                print('连接错误:',e.reason)
+                return None
+
+    def getTitle(self,page): #得到帖子的题目
+        pattern = re.compile(r'<h1 class=".*?>(.*?)</h1>')
+        result = pattern.search(page)          #可用re.search(pattern,self.page)替换
+        print('帖子名称：',result.group(1))
+        self.name = result.group(1)             #得到帖子的名字,位创建文件夹和文件做准备
+
+    def getPageNumAndReply(self,page):   #得到帖子的回复数目和页数
+        pattern = re.compile(r'<li class="l_reply_num.*?><span class=".*?>(\d+)</span>.*?>(\d+)</span>')
+        result = pattern.search(page)
+        print('该帖子共',result.group(1),'回复 ; 共',result.group(2),'页数')
+        self.pageReply = result.group(1)    #得到帖子的总回复
+        self.pageNum = result.group(2)      #得到帖子的总页数
+
+    def getContent(self,page):   #得到帖子的回复的内容以及回复者,得到回复中的图片
+        pattern = re.compile(r'<img username="(.*?)".*?<div id="post_content.*?>(.*?)</div>',re.S)      #re.S 模式下 . 可以匹配换行符
+        result = pattern.findall(page)     #findall返回的是列表,因为该匹配的是两个内容，所以列表中的每个元素是一个元组，每个元组包含了两个元素（回复内容和回复者）
+        pattern1 = re.compile(r'src="(.*?)"',re.S)      #用来匹配回复中的照片
+        for x in result:
+            content = self.removeOthers(x[1])  # 得到去除多余链接及图片后的内容
+            self.wiriteFile(x[0], content, self.x)  # 将内容写入文件中
+            result1 = pattern1.findall(x[1])        #匹配回复中的图片
+            if result1 != []:           #findall没有匹配到内容返回值是一个空的列表
+                self.savePicture(result1,self.x)        #保存图片
+            self.x += 1
+
+    def removeOthers(self,page):
+        removeImg = re.compile(r'<img .*?>')        #删除掉图片的链接
+        removeAddr = re.compile(r'<a.*?>|</a>')     #删除掉超链接
+        replaceBr = re.compile('<br>')              #替换换行符
+        removeOthers = re.compile(r'<.*?>')         #删除其他的内容
+        page = re.sub(removeImg,'',page)
+        page = re.sub(removeAddr,'',page)
+        page = re.sub(replaceBr,'\n',page)
+        page = re.sub(removeOthers,'',page)
+        return page
+
+    def wiriteFile(self,name,content,num):          #对文件的路劲需要处理
+        path = os.getcwd() + '\\' + self.name + '\\' + self.name + r'.txt'  #得到当前工作目录
+        path = path.replace('\\','//',1)        #替换目录中的\ 为// ，为创建文件做准备
+        file = open(path,'a')
+        if num == 1:
+            file.write('帖子名称：')
+            file.write(self.name)
+            file.write('   |   帖子总回复：')
+            file.write(self.pageReply)
+            file.write('   |   帖子总页数：')
+            file.write(self.pageNum)
+        file.write('\n----------------------------\n')
+        file.write('第')
+        num = str(num)
+        file.write(num)
+        file.write('楼\n\n')
+        file.write(name)
+        file.write('\n\n')
+        file.write(content)
+
+        print(num,'楼内容已爬取完成...')
+
+    def savePicture(self,Picture,num):
+        filepath = os.getcwd() + '\\' + self.name  # 得到文件的路径
+        for url in Picture:
+            a = 1
+            temp = filepath + '\\' + str(num) + '(' + str(a) + ')L.jpg'
+            urllib.request.urlretrieve(url, temp)  # 保存到本地文件中
+            a += 1
+
+    def start(self):
+        url = input("请输入所要爬取的帖子链接：")
+        seeLZ = input("是否只看楼主：")
+        Num = input("从第几页开始：")
+        if(seeLZ == '是'):
+            seeLZ = 1
+        if(seeLZ == '否'):
+            seeLZ = 0
+        self.x = 1
+        page = self.getPage(url,seeLZ,Num)
+        self.getTitle(page)
+        self.getPageNumAndReply(page)
+        filepath = os.getcwd() + '\\' + self.name  # 得到文件的路径
+        print(filepath)
+        if os.path.exists(filepath) is False:
+            print('Hlloasdk')
+            os.mkdir(filepath)
+        y1 = int(Num)
+        y2 = int(self.pageNum) + 1
+        for y in range(y1,y2):
+            page = self.getPage(url, seeLZ, y)
+            self.getContent(page)
+        print('爬取完成，实际爬取到',self.x-1,'楼！')
+
+bdtb = BDTB()
+bdtb.start()
